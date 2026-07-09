@@ -1,0 +1,6 @@
+{
+  "name": "GuardianHalo IoT Ring",
+  "description": "Smart IoT safety ring with customizable pressure activation, on-device microphone threat analysis, CrowdShield nearby rescue radar, and encrypted evidence vault.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
