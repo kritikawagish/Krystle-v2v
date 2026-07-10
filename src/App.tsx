@@ -201,6 +201,11 @@ export default function App() {
   const [vibrationTimer, setVibrationTimer] = useState<NodeJS.Timeout | null>(null);
 
   const d3SvgRef = useRef<SVGSVGElement | null>(null);
+  const locationWatchRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const dbAnimationRef = useRef<number | null>(null);
 
   // D3 Real-time Haptic Waveform Rendering Effect
   useEffect(() => {
@@ -353,6 +358,122 @@ export default function App() {
   // Web Speech Recognition Reference
   const recognitionRef = useRef<any>(null);
 
+  const requestCurrentLocation = () => {
+    if (!("geolocation" in navigator)) {
+      console.warn("Geolocation is not supported by this browser.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const nowStr = new Date().toLocaleTimeString();
+
+        setSosLocation({ lat, lng });
+        setSosTrail([{ lat, lng, time: nowStr }]);
+        console.log("Live location acquired:", lat, lng);
+      },
+      (error) => {
+        console.warn("Location permission denied or unavailable:", error);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 5000
+      }
+    );
+  };
+
+  const startRealDecibelMeter = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      console.warn("Microphone audio stream is not supported by this browser.");
+      return;
+    }
+
+    if (audioContextRef.current || analyserRef.current || micStreamRef.current) {
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const audioContext = new AudioContextClass();
+      audioContextRef.current = audioContext;
+
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      analyserRef.current = analyser;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const updateDb = () => {
+        if (!analyserRef.current) return;
+
+        analyserRef.current.getByteTimeDomainData(dataArray);
+
+        let sumSquares = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const normalized = (dataArray[i] - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+
+        const rms = Math.sqrt(sumSquares / dataArray.length);
+        const approxDb = Math.min(100, Math.max(30, Math.round(30 + rms * 120)));
+        setSoundDbLevel(approxDb);
+
+        dbAnimationRef.current = requestAnimationFrame(updateDb);
+      };
+
+      updateDb();
+    } catch (err) {
+      console.warn("Could not start real decibel meter:", err);
+    }
+  };
+
+  const stopRealDecibelMeter = () => {
+    if (dbAnimationRef.current !== null) {
+      cancelAnimationFrame(dbAnimationRef.current);
+      dbAnimationRef.current = null;
+    }
+
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => undefined);
+      audioContextRef.current = null;
+    }
+
+    analyserRef.current = null;
+    setSoundDbLevel(30);
+  };
+
+  const enterLiveSimulator = () => {
+    setCurrentPage("simulator");
+    setIsOnboarded(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    requestCurrentLocation();
+
+    setTimeout(() => {
+      try {
+        if (recognitionRef.current && !micListening) {
+          recognitionRef.current.start();
+          startRealDecibelMeter();
+        }
+      } catch (err) {
+        console.warn("Could not auto-start microphone:", err);
+      }
+    }, 500);
+  };
+
   const scrollToDemo = () => {
     const element = document.getElementById("try-demo-section");
     if (element) {
@@ -371,23 +492,37 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Simulate Location Drifting when SOS is active
+  // Track real browser GPS while SOS is active. CrowdShield responders remain simulated until real responder networking exists.
   useEffect(() => {
-    let interval: any;
-    if (sosActive) {
-      interval = setInterval(() => {
-        setSosLocation(prev => {
-          const latDrift = (Math.random() - 0.5) * 0.0003;
-          const lngDrift = (Math.random() - 0.5) * 0.0003;
-          const newLat = prev.lat + latDrift;
-          const newLng = prev.lng + lngDrift;
-          
-          const nowStr = new Date().toLocaleTimeString();
-          setSosTrail(trail => [...trail, { lat: newLat, lng: newLng, time: nowStr }]);
-          return { lat: newLat, lng: newLng };
-        });
+    let responderInterval: any;
 
-        // Pull nearby responders closer during SOS to show simulated help arriving
+    if (sosActive) {
+      if ("geolocation" in navigator) {
+        locationWatchRef.current = navigator.geolocation.watchPosition(
+          (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const nowStr = new Date().toLocaleTimeString();
+
+            setSosLocation({ lat, lng });
+            setSosTrail(trail => [...trail, { lat, lng, time: nowStr }]);
+          },
+          (error) => {
+            console.warn("Live SOS GPS tracking failed:", error);
+          },
+          {
+            enableHighAccuracy: true,
+            maximumAge: 3000,
+            timeout: 10000
+          }
+        );
+      } else {
+        console.warn("Geolocation is not supported by this browser.");
+      }
+
+      // Pull nearby responders closer during SOS to show simulated help arriving.
+      // This part is still simulated; real CrowdShield requires accounts, GPS sharing, and a database/realtime service.
+      responderInterval = setInterval(() => {
         setResponders(prev => {
           return prev.map(r => {
             if (r.distanceM > 5) {
@@ -403,7 +538,14 @@ export default function App() {
         });
       }, 3000);
     }
-    return () => clearInterval(interval);
+
+    return () => {
+      if (locationWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchRef.current);
+        locationWatchRef.current = null;
+      }
+      clearInterval(responderInterval);
+    };
   }, [sosActive]);
 
   // Countdown timer for automatic emergency authorities dispatch
@@ -435,7 +577,7 @@ export default function App() {
         const currentResultIndex = event.resultIndex;
         const transcriptText = event.results[currentResultIndex][0].transcript;
         setSpeechTranscript(transcriptText);
-        setSoundDbLevel(Math.floor(Math.random() * 30) + 65); // boost sound meter visually
+        if (!analyserRef.current) setSoundDbLevel(Math.floor(Math.random() * 30) + 65); // fallback visual if Web Audio is unavailable
 
         // Trigger AI analysis on finished statements
         if (event.results[currentResultIndex].isFinal) {
@@ -448,13 +590,14 @@ export default function App() {
         setActiveVoiceTriggerState("Listening...");
         // Animate decibel bar
         setIsDbAnimating(true);
+        startRealDecibelMeter();
       };
 
       rec.onend = () => {
         setMicListening(false);
         setActiveVoiceTriggerState("Inactive");
         setIsDbAnimating(false);
-        setSoundDbLevel(30);
+        stopRealDecibelMeter();
       };
 
       recognitionRef.current = rec;
@@ -526,9 +669,11 @@ export default function App() {
 
     if (micListening) {
       recognitionRef.current?.stop();
+      stopRealDecibelMeter();
     } else {
       try {
         recognitionRef.current?.start();
+        startRealDecibelMeter();
       } catch (err) {
         console.error("Microphone startup error:", err);
       }
@@ -546,8 +691,9 @@ export default function App() {
     }));
 
     const locationId = "SOS-" + Math.floor(100000 + Math.random() * 900000);
-    const initialLat = 37.7749 + (Math.random() - 0.5) * 0.001;
-    const initialLng = -122.4194 + (Math.random() - 0.5) * 0.001;
+    requestCurrentLocation();
+    const initialLat = sosLocation.lat;
+    const initialLng = sosLocation.lng;
     
     setSosLocation({ lat: initialLat, lng: initialLng });
     setSosTrail([{ lat: initialLat, lng: initialLng, time: new Date().toLocaleTimeString() }]);
@@ -853,10 +999,7 @@ export default function App() {
           {currentPage === "landing" ? (
             <button
               id="btn-nav-try-demo"
-              onClick={() => {
-                setCurrentPage("simulator");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
+              onClick={enterLiveSimulator}
               className="px-4 py-1.5 bg-[#FF3B30] text-white hover:bg-red-600 rounded-full text-xs font-bold font-mono flex items-center gap-1.5 transition-all shadow-md active:scale-95 hover:scale-[1.02]"
             >
               <Play className="w-3 h-3 fill-current" />
@@ -953,10 +1096,7 @@ export default function App() {
             className="flex flex-col sm:flex-row gap-4 animate-fade-in"
           >
             <button
-              onClick={() => {
-                setCurrentPage("simulator");
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
+              onClick={enterLiveSimulator}
               className="px-8 py-4 bg-[#FF3B30] text-white rounded-xl font-bold text-sm tracking-wide shadow-lg shadow-red-600/35 hover:bg-[#D32F2F] active:scale-95 transition-all flex items-center justify-center gap-2"
             >
               <Play className="w-4 h-4 fill-current" />
@@ -975,10 +1115,7 @@ export default function App() {
             each paired with a live preview matching the simulator section it powers */}
         <CapabilityShowcase
           isDark={isDark}
-          onTryDemo={() => {
-            setCurrentPage("simulator");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
+          onTryDemo={enterLiveSimulator}
         />
 
         {/* Scroll-linked dynamic text-reveal component */}
@@ -993,10 +1130,7 @@ export default function App() {
             page just stopped after the block above) */}
         <ClosingSection
           isDark={isDark}
-          onTryDemo={() => {
-            setCurrentPage("simulator");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
+          onTryDemo={enterLiveSimulator}
         />
       </motion.div>
     ) : (
@@ -2703,4 +2837,3 @@ export default function App() {
     </div>
   );
 }
-
