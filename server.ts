@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
-import { analyzeThreat, dispatchAlert } from "./api/_lib/threat-engine";
+import { analyzeThreat, dispatchAlert } from "./api/lib/threat-engine";
 
 dotenv.config();
 
@@ -12,7 +12,7 @@ const PORT = Number(process.env.PORT) || 3000;
 app.use(express.json());
 
 // REST APIs
-// NOTE: The actual business logic lives in api/_lib/threat-engine.ts so that
+// NOTE: The actual business logic lives in api/lib/threat-engine.ts so that
 // this local Express server and the Vercel serverless functions in /api
 // (used in production) always stay perfectly in sync.
 
@@ -34,10 +34,10 @@ app.post("/api/analyze-threat", async (req, res) => {
 });
 
 // 2. Emergency SOS Dispatcher
-app.post("/api/trigger-alert", async (req, res) => {
+app.post("/api/trigger-alert", (req, res) => {
   const { contacts, location, triggerMethod, timestamp } = req.body;
   try {
-    const result = await dispatchAlert(contacts, location, triggerMethod, timestamp);
+    const result = dispatchAlert(contacts, location, triggerMethod, timestamp);
     res.json(result);
   } catch (err) {
     console.error("trigger-alert error:", err);
