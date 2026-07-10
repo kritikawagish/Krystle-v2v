@@ -1,5 +1,5 @@
-import { analyzeThreat } from "./_lib/threat-engine";
-import type { GenericApiRequest, GenericApiResponse } from "./_lib/http-types";
+import { analyzeThreat } from "./lib/threat-engine";
+import type { GenericApiRequest, GenericApiResponse } from "./lib/http-types";
 
 // Vercel automatically turns this file into: POST /api/analyze-threat
 // (Typed loosely on purpose - avoids pulling in @vercel/node as a dependency.
