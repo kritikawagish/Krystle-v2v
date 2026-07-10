@@ -37,6 +37,7 @@ import {
 import AnimatedTextReveal from "./components/AnimatedTextReveal";
 import ScrollTextReveal from "./components/ScrollTextReveal";
 import CapabilityShowcase from "./components/CapabilityShowcase";
+import ClosingSection from "./components/ClosingSection";
 import { 
   RingColor, 
   EmergencyContact, 
@@ -987,6 +988,16 @@ export default function App() {
             isDark={isDark}
           />
         </div>
+
+        {/* CLOSING SECTION - proper end-of-page moment + footer (previously the
+            page just stopped after the block above) */}
+        <ClosingSection
+          isDark={isDark}
+          onTryDemo={() => {
+            setCurrentPage("simulator");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
       </motion.div>
     ) : (
       <motion.div
@@ -2672,8 +2683,8 @@ export default function App() {
 </main>
 
       {/* FOOTER METRICS INFO */}
-      <footer id="app-footer" className={`border-t py-6 px-6 text-center text-[10px] font-mono uppercase tracking-wider transition-colors duration-300 ${styles.divider} ${styles.innerBg} ${styles.textMuted}`}>
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+      <footer id="app-footer" className={`border-t transition-colors duration-300 ${styles.divider} ${styles.innerBg}`}>
+        <div className={`max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-3 text-[10px] font-mono uppercase tracking-wider ${styles.textMuted}`}>
           <span>GuardianHalo SmartRing Companion Suite (v1.0.4)</span>
           <div className={`flex items-center gap-4 ${styles.textSec}`}>
             <span>BLE Relay Latency: <strong className="text-emerald-400 font-mono font-bold">&lt; 1.2s</strong></span>
@@ -2681,7 +2692,15 @@ export default function App() {
             <span>Threat Accuracy: <strong className="text-emerald-400 font-mono font-bold">97.4%</strong></span>
           </div>
         </div>
+        <div className={`border-t ${styles.divider} max-w-7xl mx-auto px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-2 text-[10px] normal-case tracking-normal ${styles.textMuted}`}>
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full border border-[#FF3B30] inline-block" />
+            Conceptual hackathon prototype — not a certified medical, legal, or emergency dispatch device.
+          </span>
+          <span>&copy; {new Date().getFullYear()} GuardianHalo</span>
+        </div>
       </footer>
     </div>
   );
 }
+
