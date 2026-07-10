@@ -34,10 +34,10 @@ app.post("/api/analyze-threat", async (req, res) => {
 });
 
 // 2. Emergency SOS Dispatcher
-app.post("/api/trigger-alert", (req, res) => {
+app.post("/api/trigger-alert", async (req, res) => {
   const { contacts, location, triggerMethod, timestamp } = req.body;
   try {
-    const result = dispatchAlert(contacts, location, triggerMethod, timestamp);
+    const result = await dispatchAlert(contacts, location, triggerMethod, timestamp);
     res.json(result);
   } catch (err) {
     console.error("trigger-alert error:", err);
